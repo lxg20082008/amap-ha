@@ -33,9 +33,9 @@
 
 ### 1. 获取天地图 API Key
 
-1. 访问 [天地图 API 申请页面](http://lbs.tianditu.gov.cn/api.html)
-2. 注册账号并申请 API Key
-3. 记录您的 API Key
+1. 访问 [天地图 API 申请页面](http://lbs.tianditu.gov.cn/home.html)
+2. 注册账号并申请 **个人开发者** 账户
+3. 建立应用，记录您的 API Key
 
 ### 2. 配置 Home Assistant
 
