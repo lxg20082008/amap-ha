@@ -31,14 +31,23 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     conf = config[DOMAIN]
     api_key = conf["api_key"]
     
-    # 将API密钥存储到hass数据中，供前端使用
+    # 将API密钥存储到hass数据中
     hass.data[DOMAIN] = {"api_key": api_key}
     
     # 注册前端资源
+    frontend_path = os.path.join(os.path.dirname(__file__), "frontend")
     hass.http.register_static_path(
         "/tianditu_map",
-        os.path.join(os.path.dirname(__file__), "frontend"),
+        frontend_path,
         True
+    )
+    
+    # 注册前端模块
+    hass.components.frontend.async_register_extra_js_url(
+        hass, f"/tianditu_map/tianditu_config.js?{hass.config.version}"
+    )
+    hass.components.frontend.async_register_extra_js_url(
+        hass, f"/tianditu_map/hass_tianditu.js?{hass.config.version}"
     )
     
     _LOGGER.info("天地图地图集成加载完成")
