@@ -1,0 +1,6 @@
+{
+  "name": "天地图地图",
+  "render_readme": true,
+  "domains": ["tianditu_map"],
+  "homeassistant": "2023.1.0"
+}
