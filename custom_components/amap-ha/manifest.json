@@ -1,0 +1,12 @@
+{
+  "domain": "amap_ha",
+  "name": "AMap Tile Layer",
+  "codeowners": ["@your_username"],
+  "config_flow": true,
+  "dependencies": ["frontend"],
+  "documentation": "https://github.com/your_username/amap-ha",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0"
+}
