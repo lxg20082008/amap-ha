@@ -4,8 +4,7 @@ import logging
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers import config_validation as cv
+import homeassistant.helpers.config_validation as cv
 
 from .http import AmapTileLayerView
 
@@ -52,16 +51,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     # 注册HTTP视图
     hass.http.register_view(AmapTileLayerView(hass))
     
-    return True
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up AMap Tile Layer from a config entry."""
-    # 如果是通过UI配置的，也支持
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].update(entry.data)
+    _LOGGER.info("AMap Tile Layer integration loaded with config: %s", hass.data[DOMAIN])
     
-    return True
-
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
     return True

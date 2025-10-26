@@ -5,7 +5,7 @@
   "config_flow": false,
   "dependencies": ["http"],
   "documentation": "https://github.com/your_username/amap-ha",
-  "integration_type": "module", 
+  "integration_type": "system",
   "iot_class": "cloud_polling",
   "requirements": [],
   "version": "1.0.0"
