@@ -1,5 +1,5 @@
 {
-  "name": "AMap Tile Layer",
+  "name": "高德瓦片",
   "render_readme": true,
   "filename": "amap-tile-layer.js",
   "content_in_root": false,
