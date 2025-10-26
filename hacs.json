@@ -1,0 +1,8 @@
+{
+  "name": "AMap Tile Layer",
+  "render_readme": true,
+  "filename": "amap-tile-layer.js",
+  "content_in_root": false,
+  "domains": ["sensor"],
+  "homeassistant": "2023.8.0"
+}
