@@ -1,19 +1,8 @@
-console.log('🎯 AMap Tile Layer 加载成功');
-
 const PROXY_URL = 'http://192.168.31.3:8280';
-const MAX_ZOOM = 18;
+const MAX_Z = 18;
 const TILE_SIZE = 256;
 
-// 高德代理服务URL生成
-function generateAmapProxyUrl(x, y, z, type = 'normal') {
-    if (type === 'satellite') {
-        return `${PROXY_URL}/satellite/${z}/${x}/${y}.png`;
-    } else {
-        return `${PROXY_URL}/normal/${z}/${x}/${y}.png`;
-    }
-}
-
-// 降级算法
+// 降级算法（从天地图复制）
 function downgradeTile(x, y, z, maxZoom) {
     if (z <= maxZoom) {
         return { srcX: x, srcY: y, srcZ: z, scale: 1, dx: 0, dy: 0 };
@@ -23,100 +12,161 @@ function downgradeTile(x, y, z, maxZoom) {
     const srcY = Math.floor(y / scale);
     const srcZ = maxZoom;
 
-    const offsetX = (x % scale) * TILE_SIZE / scale;
-    const offsetY = (y % scale) * TILE_SIZE / scale;
-    return { srcX, srcY, srcZ, scale, dx: -offsetX * scale, dy: -offsetY * scale };
+    const tileSize = 256;
+    const offsetX = (x % scale) * tileSize / scale;
+    const offsetY = (y % scale) * tileSize / scale;
+    return {
+        srcX, srcY, srcZ, scale,
+        dx: -offsetX * scale, dy: -offsetY * scale
+    };
 }
 
 const existsCoordSet = new Set();
 
-function initDomObserver() {
-    function transformCartoImg(img) {
-        const src = img.src;
-        if (!src.includes('cartocdn.com')) return;
-
-        const match = src.match(/rastertiles\/voyager\/(\d+)\/(\d+)\/(\d+)/);
-        if (!match) return;
-
-        const [_, zStr, xStr, yStr] = match;
-        const z = parseInt(zStr);
-        const x = parseInt(xStr);
-        const y = parseInt(yStr);
-
-        if (z <= MAX_Z) {
-            const amapSrc = generateAmapProxyUrl(x, y, z, 'normal');
-            img.src = amapSrc;
-            console.log('[AMap替换]', src, '→', amapSrc);
-            return;
-        }
-
-        // 降级处理
-        const { srcX, srcY, srcZ, scale, dx, dy } = downgradeTile(x, y, z, MAX_Z);
-        
-        const downgradeKey = `${srcX},${srcY},${srcZ},${z}`;
-
-        if (existsCoordSet.has(downgradeKey)) {
-            img.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
-            img.style.display = "none";
-            return;
-        }
-
-        existsCoordSet.add(downgradeKey);
-        const amapSrc = generateAmapProxyUrl(srcX, srcY, srcZ, 'normal');
-
-        // 应用transform变换
-        if (img.style.transform && img.style.transform.includes('translate3d(')) {
-            const translateMatch = img.style.transform.match(/translate3d\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
-            if (translateMatch) {
-                const translateX = parseFloat(translateMatch[1]);
-                const translateY = parseFloat(translateMatch[2]);
-                const newTranslateX = translateX + dx;
-                const newTranslateY = translateY + dy;
-                img.style.transform = img.style.transform.replace(/translate3d\([^)]+\)/, `translate3d(${newTranslateX}px, ${newTranslateY}px, 0px)`);
-            }
-        }
-
-        if (!img.style.transform.includes('scale(')) {
-            img.style.transform = (img.style.transform || '') + ` scale(${scale})`;
-        }
-
-        img.style.width = TILE_SIZE + 'px';
-        img.style.height = TILE_SIZE + 'px';
-        img.style.transformOrigin = 'top left';
-        img.src = amapSrc;
-        
-        console.log('[AMap降级]', `${z} → ${MAX_Z}`, amapSrc);
+function transformCartoImg(img) {
+    const src = img.src;
+    if (!src || !src.startsWith('https://basemaps.cartocdn.com/')) {
+        return;
     }
 
-    // DOM监听逻辑
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            mutation.addedNodes.forEach((node) => {
-                if (node.tagName === 'IMG') {
-                    transformCartoImg(node);
+    const match = src.match(/rastertiles\/voyager\/(\d+)\/(\d+)\/(\d+)(?:@2x)?\.png/);
+    if (!match) return;
+
+    let [_, zStr, xStr, yStr] = match;
+    let z = parseInt(zStr);
+    let x = parseInt(xStr);
+    let y = parseInt(yStr);
+
+    if (z <= MAX_Z) {
+        const amapSrc = `${PROXY_URL}/normal/${z}/${x}/${y}.png`;
+        img.src = amapSrc;
+        console.log('[AMAP] 替换瓦片:', src, '→', amapSrc);
+        return;
+    }
+
+    // 降级处理
+    const { srcX, srcY, srcZ, scale, dx, dy } = downgradeTile(x, y, z, MAX_Z);
+    const downgradeKey = `${srcX},${srcY},${srcZ},${z}`;
+
+    if (existsCoordSet.has(downgradeKey)) {
+        img.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+        img.style.display = "none";
+        return;
+    }
+
+    img["downgradeKey"] = downgradeKey;
+    existsCoordSet.add(downgradeKey);
+
+    const amapSrc = `${PROXY_URL}/normal/${srcX}/${srcY}/${srcZ}.png`;
+
+    // 应用变换
+    if (img.style.transform && img.style.transform.includes('translate3d(')) {
+        const translateMatch = img.style.transform.match(/translate3d\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+        if (translateMatch) {
+            const translateX = parseFloat(translateMatch[1]);
+            const translateY = parseFloat(translateMatch[2]);
+            const newTranslateX = translateX + dx;
+            const newTranslateY = translateY + dy;
+            img.style.transform = img.style.transform.replace(/translate3d\([^)]+\)/, `translate3d(${newTranslateX}px, ${newTranslateY}px, 0px)`);
+        }
+    }
+
+    if (!img.style.transform.includes('scale(')) {
+        img.style.transform = (img.style.transform || '') + ` scale(${scale})`;
+    }
+
+    img.style.width = TILE_SIZE + 'px';
+    img.style.height = TILE_SIZE + 'px';
+    img.style.transformOrigin = 'top left';
+
+    img.src = amapSrc;
+    console.log('[AMAP] 降级瓦片:', `${z} → ${MAX_Z}, src:`, amapSrc);
+}
+
+function initDomObserver() {
+    const _appendChild = Element.prototype.appendChild;
+
+    function handleAddedNode(node) {
+        if (!(node instanceof Element)) return;
+
+        if (node.tagName === 'DIV' && node.classList.contains('leaflet-layer')) {
+            node.appendChild = function (child) {
+                if (child.tagName === 'DIV' && child.classList.contains('leaflet-tile-container')) {
+                    // 立即处理现有瓦片
+                    Array.from(child.querySelectorAll('img')).forEach(img => {
+                        transformCartoImg(img);
+                    });
+
+                    // 拦截新瓦片
+                    child.appendChild = function (frags) {
+                        if (frags.children) {
+                            Array.from(frags.children).forEach(img => {
+                                if (img.tagName === 'IMG') {
+                                    transformCartoImg(img);
+                                }
+                            });
+                        }
+                        return _appendChild.call(this, frags);
+                    };
                 }
-                // 检查子节点
-                if (node.querySelectorAll) {
-                    node.querySelectorAll('img[src*="cartocdn.com"]').forEach(transformCartoImg);
-                }
-            });
-        });
+                return _appendChild.call(this, child);
+            };
+        }
+    }
+
+    function handleRemovedNode(node) {
+        if (node.tagName === 'IMG' && node["downgradeKey"]) {
+            existsCoordSet.delete(node["downgradeKey"]);
+        }
+    }
+
+    const observer = new MutationObserver(mutations => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                handleAddedNode(node);
+            }
+            for (const node of mutation.removedNodes) {
+                handleRemovedNode(node);
+            }
+        }
     });
 
-    observer.observe(document.body, {
+    observer.observe(document, {
         childList: true,
         subtree: true
     });
 
-    // 立即替换现有图片
-    document.querySelectorAll('img[src*="cartocdn.com"]').forEach(transformCartoImg);
+    // 处理 Shadow DOM（从天地图复制）
+    function observeShadowRoots(root) {
+        const queue = [root];
+        while (queue.length > 0) {
+            const el = queue.shift();
+            if (el.shadowRoot) {
+                observer.observe(el.shadowRoot, {
+                    childList: true,
+                    subtree: true
+                });
+                queue.push(...el.shadowRoot.querySelectorAll('*'));
+            }
+            if (el.children) {
+                queue.push(...el.children);
+            }
+        }
+    }
+    observeShadowRoots(document.body);
+
+    // 拦截 attachShadow（从天地图复制）
+    const originalAttachShadow = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function (init) {
+        const shadow = originalAttachShadow.call(this, init);
+        observer.observe(shadow, {
+            childList: true,
+            subtree: true
+        });
+        return shadow;
+    };
 }
 
-// 初始化
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDomObserver);
-} else {
-    initDomObserver();
-}
-
-console.log('🎉 AMap Tile Layer 初始化完成');
+// 关键：立即执行，不等待！
+console.log('[AMAP] 启动高德地图瓦片替换');
+initDomObserver();
