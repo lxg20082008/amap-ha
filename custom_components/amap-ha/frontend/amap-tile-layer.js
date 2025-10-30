@@ -1,6 +1,10 @@
-const PROXY_URL = 'http://192.168.31.3:8280';
+// 配置常量 - 使用变量避免硬编码
+const DOMAIN = 'amap_ha';
+const CONF_PROXY_URL = 'proxy_url';
+const DEFAULT_PROXY_URL = 'http://localhost:8280';
 const MAX_Z = 18;
 const TILE_SIZE = 256;
+const AMAP_TILE_PATH = '/amap';
 
 // 降级算法（从天地图复制）
 function downgradeTile(x, y, z, maxZoom) {
@@ -23,7 +27,26 @@ function downgradeTile(x, y, z, maxZoom) {
 
 const existsCoordSet = new Set();
 
-function transformCartoImg(img) {
+// 从配置加载代理URL
+async function loadProxyUrl() {
+    try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+        
+        if (config.components && config.components[DOMAIN] && config.components[DOMAIN][CONF_PROXY_URL]) {
+            return config.components[DOMAIN][CONF_PROXY_URL];
+        }
+    } catch (error) {
+        console.warn(`[${DOMAIN}] 加载配置失败，使用默认URL:`, error);
+    }
+    return DEFAULT_PROXY_URL;
+}
+
+function generateAmapUrl(proxyUrl, x, y, z) {
+    return `${proxyUrl}${AMAP_TILE_PATH}/${z}/${x}/${y}.jpg`;
+}
+
+function transformCartoImg(img, proxyUrl) {
     const src = img.src;
     if (!src || !src.startsWith('https://basemaps.cartocdn.com/')) {
         return;
@@ -38,9 +61,9 @@ function transformCartoImg(img) {
     let y = parseInt(yStr);
 
     if (z <= MAX_Z) {
-        const amapSrc = `${PROXY_URL}/normal/${z}/${x}/${y}.png`;
+        const amapSrc = generateAmapUrl(proxyUrl, x, y, z);
         img.src = amapSrc;
-        console.log('[AMAP] 替换瓦片:', src, '→', amapSrc);
+        console.log(`[${DOMAIN}] 替换瓦片:`, src, '→', amapSrc);
         return;
     }
 
@@ -57,7 +80,7 @@ function transformCartoImg(img) {
     img["downgradeKey"] = downgradeKey;
     existsCoordSet.add(downgradeKey);
 
-    const amapSrc = `${PROXY_URL}/normal/${srcX}/${srcY}/${srcZ}.png`;
+    const amapSrc = generateAmapUrl(proxyUrl, srcX, srcY, srcZ);
 
     // 应用变换
     if (img.style.transform && img.style.transform.includes('translate3d(')) {
@@ -80,10 +103,13 @@ function transformCartoImg(img) {
     img.style.transformOrigin = 'top left';
 
     img.src = amapSrc;
-    console.log('[AMAP] 降级瓦片:', `${z} → ${MAX_Z}, src:`, amapSrc);
+    console.log(`[${DOMAIN}] 降级瓦片:`, `${z} → ${MAX_Z}, src:`, amapSrc);
 }
 
-function initDomObserver() {
+async function initDomObserver() {
+    const proxyUrl = await loadProxyUrl();
+    console.log(`[${DOMAIN}] 启动高德地图瓦片替换，代理URL:`, proxyUrl);
+    
     const _appendChild = Element.prototype.appendChild;
 
     function handleAddedNode(node) {
@@ -94,7 +120,7 @@ function initDomObserver() {
                 if (child.tagName === 'DIV' && child.classList.contains('leaflet-tile-container')) {
                     // 立即处理现有瓦片
                     Array.from(child.querySelectorAll('img')).forEach(img => {
-                        transformCartoImg(img);
+                        transformCartoImg(img, proxyUrl);
                     });
 
                     // 拦截新瓦片
@@ -102,7 +128,7 @@ function initDomObserver() {
                         if (frags.children) {
                             Array.from(frags.children).forEach(img => {
                                 if (img.tagName === 'IMG') {
-                                    transformCartoImg(img);
+                                    transformCartoImg(img, proxyUrl);
                                 }
                             });
                         }
@@ -168,5 +194,4 @@ function initDomObserver() {
 }
 
 // 关键：立即执行，不等待！
-console.log('[AMAP] 启动高德地图瓦片替换');
 initDomObserver();
